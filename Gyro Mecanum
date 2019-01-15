@@ -1,0 +1,110 @@
+/*----------------------------------------------------------------------------*/
+/* Copyright (c) 2017-2018 FIRST. All Rights Reserved.                        */
+/* Open Source Software - may be modified and shared by FRC teams. The code   */
+/* must be accompanied by the FIRST BSD license file in the root directory of */
+/* the project.                                                               */
+/*----------------------------------------------------------------------------*/
+//C:\Users\CasaEsperanza\Desktop\VSCode-FRC 2019\Casa Mesa 2019 - Gyro Mecanum\FRCGyroMecanum>gradlew deploy -PteamNumber=2261  --offline -Dorg.gradle.java.home="C:\Users\Public\frc2019\jdk"
+//Use ^ to build code when typed in command prompt
+//In the directory below \/ with "cd "
+//C:\Users\CasaEsperanza\Desktop\VSCode-FRC 2019\Casa Mesa 2019 - Gyro Mecanum\FRCGyroMecanum
+package frc.robot;
+
+import edu.wpi.first.wpilibj.AnalogGyro;
+import edu.wpi.first.wpilibj.Joystick;
+import edu.wpi.first.wpilibj.Spark;
+import edu.wpi.first.wpilibj.TimedRobot;
+import edu.wpi.first.wpilibj.drive.MecanumDrive;
+
+/**
+ * This is a sample program that uses mecanum drive with a gyro sensor to
+ * maintian rotation vectorsin relation to the starting orientation of the robot
+ * (field-oriented controls).
+ */
+public class Robot extends TimedRobot {
+
+  // Set to false if driving funny
+  private static final boolean isGyroEnabled = true;
+
+  // gyro calibration constant, may need to be adjusted;
+  // gyro value of 360 is set to correspond to one full revolution
+  private static final double kVoltsPerDegreePerSecond = 0.0128;
+
+  //These below are labelled to the motors (0-9)
+  private static final int kFrontLeftChannel = 0;
+  private static final int kRearLeftChannel = 1;
+  private static final int kFrontRightChannel = 2;
+  private static final int kRearRightChannel = 3;
+  private static final int kForkLiftChannel = 4;
+  private static final int kPincherChannel = 5;
+  private static final int kBallGraberWheelChannel = 6;
+  private static final int kGyroPort = 0;
+  private static final int kDriveJoystickPort = 0;
+  private static final int kAccesoryJoystickPort = 1;
+  private static final double kForkLiftDriveMagnitude = .75;
+
+  private MecanumDrive m_robotDrive;
+  private final AnalogGyro m_gyro = new AnalogGyro(kGyroPort);
+  private final Joystick m_driveJoystick = new Joystick(kDriveJoystickPort);
+  private final Joystick m_accesoryJoystick = new Joystick(kAccesoryJoystickPort);
+  private final Spark m_forkLiftDrive = new Spark(kForkLiftChannel);
+  private final Spark m_pincherDrive = new Spark(kPincherChannel);
+  private final Spark m_wheelGraber = new Spark(kBallGraberWheelChannel);
+
+  Spark frontLeft = new Spark(kFrontLeftChannel);
+  Spark rearLeft = new Spark(kRearLeftChannel);
+  Spark frontRight = new Spark(kFrontRightChannel);
+  Spark rearRight = new Spark(kRearRightChannel);
+
+  boolean robotInitted = false;
+
+  @Override
+  public void robotInit() {
+    if (!robotInitted) {
+			System.out.println("Robot not initted? Initting...");
+			robotInit();
+		}
+    
+    // Invert the left side motors.
+    // You may need to change or remove this to match your robot.
+    frontLeft.setInverted(true);
+    rearLeft.setInverted(true);
+
+    // e.g. invert motor if spinning "backwards"
+    //m_wheelGraber.setInverted(true);
+
+    m_robotDrive = new MecanumDrive(frontLeft, rearLeft, frontRight, rearRight);
+
+    m_gyro.setSensitivity(kVoltsPerDegreePerSecond);
+  }
+
+  /**
+   * Mecanum drive is used with the gyro angle as an input.
+   */
+  @Override
+  public void teleopPeriodic() {
+    m_robotDrive.driveCartesian(m_driveJoystick.getX(), m_driveJoystick.getY(),
+        m_driveJoystick.getZ(), getGyroIfEnabled());
+
+    m_forkLiftDrive.set(m_accesoryJoystick.getY());
+
+    if(m_accesoryJoystick.getRawButton(2)) {
+      m_pincherDrive.set(kForkLiftDriveMagnitude);
+    } else if(m_accesoryJoystick.getRawButton(3)) {
+      m_pincherDrive.set(-kForkLiftDriveMagnitude);
+    } else {
+      m_pincherDrive.set(0);
+    }
+    
+    m_wheelGraber.set(m_accesoryJoystick.getTwist());
+  }
+
+  private double getGyroIfEnabled() {
+    if(isGyroEnabled) {
+      return m_gyro.getAngle();
+    } else 
+      return 0;
+  }
+
+
+}
