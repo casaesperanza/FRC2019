@@ -11,10 +11,13 @@
 package frc.robot;
 
 import edu.wpi.first.wpilibj.AnalogGyro;
+import edu.wpi.first.cameraserver.CameraServer;
+import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.Spark;
-import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.drive.MecanumDrive;
+
+//import edu.wpi.first.wpilibj.vision;
 
 /**
  * This is a sample program that uses mecanum drive with a gyro sensor to
@@ -24,7 +27,7 @@ import edu.wpi.first.wpilibj.drive.MecanumDrive;
 public class Robot extends TimedRobot {
 
   // Set to false if driving funny
-  private static final boolean isGyroEnabled = true;
+  private static final boolean isGyroEnabled = false;
 
   // gyro calibration constant, may need to be adjusted;
   // gyro value of 360 is set to correspond to one full revolution
@@ -38,10 +41,14 @@ public class Robot extends TimedRobot {
   private static final int kForkLiftChannel = 4;
   private static final int kPincherChannel = 5;
   private static final int kBallGraberWheelChannel = 6;
+  private static final int kArmLiftChannel = 7;
   private static final int kGyroPort = 0;
   private static final int kDriveJoystickPort = 0;
   private static final int kAccesoryJoystickPort = 1;
-  private static final double kForkLiftDriveMagnitude = .75;
+  private static final double kPincherDriveMagnitude = .75;
+  private static final double kRotateDriveMagnitude = 0.5;
+  private static final double kWheelGrabberDriveMagnitude = 0.5;
+
 
   private MecanumDrive m_robotDrive;
   private final AnalogGyro m_gyro = new AnalogGyro(kGyroPort);
@@ -50,6 +57,7 @@ public class Robot extends TimedRobot {
   private final Spark m_forkLiftDrive = new Spark(kForkLiftChannel);
   private final Spark m_pincherDrive = new Spark(kPincherChannel);
   private final Spark m_wheelGraber = new Spark(kBallGraberWheelChannel);
+  private final Spark m_armLiftDrive = new Spark(kArmLiftChannel);
 
   Spark frontLeft = new Spark(kFrontLeftChannel);
   Spark rearLeft = new Spark(kRearLeftChannel);
@@ -60,22 +68,17 @@ public class Robot extends TimedRobot {
 
   @Override
   public void robotInit() {
-    if (!robotInitted) {
-			System.out.println("Robot not initted? Initting...");
-			robotInit();
-		}
-    
     // Invert the left side motors.
     // You may need to change or remove this to match your robot.
-    frontLeft.setInverted(true);
-    rearLeft.setInverted(true);
-
+    //frontLeft.setInverted(true);
+    //rearLeft.setInverted(true);
     // e.g. invert motor if spinning "backwards"
     //m_wheelGraber.setInverted(true);
-
     m_robotDrive = new MecanumDrive(frontLeft, rearLeft, frontRight, rearRight);
-
+    CameraServer.getInstance().startAutomaticCapture();
     m_gyro.setSensitivity(kVoltsPerDegreePerSecond);
+
+    robotInitted = true;
   }
 
   /**
@@ -83,20 +86,44 @@ public class Robot extends TimedRobot {
    */
   @Override
   public void teleopPeriodic() {
-    m_robotDrive.driveCartesian(m_driveJoystick.getX(), m_driveJoystick.getY(),
-        m_driveJoystick.getZ(), getGyroIfEnabled());
-
-    m_forkLiftDrive.set(m_accesoryJoystick.getY());
-
+    if (!robotInitted) {
+			System.out.println("Robot not initted? Initting...");
+			robotInit();
+    }
+    //------------------------------------------ForkLift-------------------------------------
+    m_forkLiftDrive.set(-1.0*scaleJoystickInput(m_accesoryJoystick.getY()));
+    //------------------------------------------RotateDrive----------------------------------
+    if(m_driveJoystick.getRawButton(4)) {
+      m_robotDrive.driveCartesian(0, 0, -kRotateDriveMagnitude, getGyroIfEnabled());
+    } else if(m_driveJoystick.getRawButton(5)) {
+      m_robotDrive.driveCartesian(0, 0, kRotateDriveMagnitude, getGyroIfEnabled());
+    } else if(m_driveJoystick.getRawButton(1)) {
+      m_robotDrive.driveCartesian(0, 0, scaleJoystickInput(m_driveJoystick.getX()), getGyroIfEnabled());
+    } else {
+      m_robotDrive.driveCartesian(scaleJoystickInput(m_driveJoystick.getX()), -1.0*scaleJoystickInput(m_driveJoystick.getY()),
+      0, getGyroIfEnabled());
+    }
+    //------------------------------------------Pincher---------------------------------------
     if(m_accesoryJoystick.getRawButton(2)) {
-      m_pincherDrive.set(kForkLiftDriveMagnitude);
+      m_pincherDrive.set(kPincherDriveMagnitude);
     } else if(m_accesoryJoystick.getRawButton(3)) {
-      m_pincherDrive.set(-kForkLiftDriveMagnitude);
+      m_pincherDrive.set(-kPincherDriveMagnitude);
     } else {
       m_pincherDrive.set(0);
     }
-    
-    m_wheelGraber.set(m_accesoryJoystick.getTwist());
+    //-------------------------------------------LittleWheels----------------------------------
+    if(m_accesoryJoystick.getRawButton(1)) {
+      m_wheelGraber.set(kWheelGrabberDriveMagnitude);
+    } else if(m_accesoryJoystick.getRawButton(4)) {
+      m_wheelGraber.set(-kWheelGrabberDriveMagnitude);
+    } else {
+      m_wheelGraber.set(0);
+    }
+    //-------------------------------------------PotentialArmLift------------------------------
+    /*
+    m_armLiftDrive.set(scaleJoystickInput(m_accesoryJoystick.getZ()));
+    */
+
   }
 
   private double getGyroIfEnabled() {
@@ -106,5 +133,29 @@ public class Robot extends TimedRobot {
       return 0;
   }
 
+  	/**
+	 * This method leverages a heuristic to "efficiently" add a dead zone and scale
+	 * the input to a quadratic curve
+	 * 
+	 * @param input
+	 *            value to be scaled, assumed t0o be [-1,1]
+	 * @return scaled input
+	 */
+	public double scaleJoystickInput(double input) {
+		// Scales input from [-1,1] to [-0.03,0.97]
+    double adjustedInput = input * input - 0.03;
+    //this was to set a deadzone on the controller to deal with hardware imperfections
+		if (adjustedInput < 0) { // Interpret < 0 as deadzone
+			adjustedInput = 0;
+		} else if (adjustedInput > 0.9) { // Interpret anything near max as max
+			adjustedInput = 1;
+		}
+
+		if (input < 0) { // Adjust sign to match original input
+			adjustedInput = -adjustedInput;
+		}
+
+		return adjustedInput;
+	}
 
 }
