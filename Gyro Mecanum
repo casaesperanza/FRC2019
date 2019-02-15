@@ -10,12 +10,16 @@
 //C:\Users\CasaEsperanza\Desktop\VSCode-FRC 2019\Casa Mesa 2019 - Gyro Mecanum\FRCGyroMecanum
 package frc.robot;
 
+
 import edu.wpi.first.wpilibj.AnalogGyro;
 import edu.wpi.first.cameraserver.CameraServer;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.Joystick;
-import edu.wpi.first.wpilibj.Spark;
+import edu.wpi.first.wpilibj.Spark; 
 import edu.wpi.first.wpilibj.drive.MecanumDrive;
+import edu.wpi.first.wpilibj.Timer;
+import edu.wpi.first.wpilibj.DigitalInput;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
 //import edu.wpi.first.wpilibj.vision;
 
@@ -28,7 +32,9 @@ public class Robot extends TimedRobot {
 
   // Set to false if driving funny
   private static final boolean isGyroEnabled = false;
-
+  private static final boolean isForkLimitUpperEnabled = true;
+  private static final boolean isForkLimitLowerEnabled = true;
+  
   // gyro calibration constant, may need to be adjusted;
   // gyro value of 360 is set to correspond to one full revolution
   private static final double kVoltsPerDegreePerSecond = 0.0128;
@@ -41,13 +47,17 @@ public class Robot extends TimedRobot {
   private static final int kForkLiftChannel = 4;
   private static final int kPincherChannel = 5;
   private static final int kBallGraberWheelChannel = 6;
-  private static final int kArmLiftChannel = 7;
+  //private static final int kArmLiftChannel = 7;
   private static final int kGyroPort = 0;
   private static final int kDriveJoystickPort = 0;
   private static final int kAccesoryJoystickPort = 1;
   private static final double kPincherDriveMagnitude = .75;
   private static final double kRotateDriveMagnitude = 0.5;
-  private static final double kWheelGrabberDriveMagnitude = 0.5;
+  private static final double kWheelGrabberDriveMagnitude = 0.25; // Must be less than .5! (Since they double in usage below)
+
+  private static final int kForkLiftSwitchUpChannel = 0;
+
+  private static final int kForkLiftSwitchDownChannel = 1;
 
 
   private MecanumDrive m_robotDrive;
@@ -57,7 +67,9 @@ public class Robot extends TimedRobot {
   private final Spark m_forkLiftDrive = new Spark(kForkLiftChannel);
   private final Spark m_pincherDrive = new Spark(kPincherChannel);
   private final Spark m_wheelGraber = new Spark(kBallGraberWheelChannel);
-  private final Spark m_armLiftDrive = new Spark(kArmLiftChannel);
+  private DigitalInput m_limitSwitchDown;
+  private DigitalInput m_limitSwitchUp;
+  //private final Spark m_armLiftDrive = new Spark(kArmLiftChannel);
 
   Spark frontLeft = new Spark(kFrontLeftChannel);
   Spark rearLeft = new Spark(kRearLeftChannel);
@@ -75,8 +87,12 @@ public class Robot extends TimedRobot {
     // e.g. invert motor if spinning "backwards"
     //m_wheelGraber.setInverted(true);
     m_robotDrive = new MecanumDrive(frontLeft, rearLeft, frontRight, rearRight);
-    CameraServer.getInstance().startAutomaticCapture();
+    CameraServer.getInstance().startAutomaticCapture(0);
+    CameraServer.getInstance().startAutomaticCapture(1);
     m_gyro.setSensitivity(kVoltsPerDegreePerSecond);
+    
+    m_limitSwitchDown = new DigitalInput(kForkLiftSwitchDownChannel);
+    m_limitSwitchUp = new DigitalInput(kForkLiftSwitchUpChannel);
 
     robotInitted = true;
   }
@@ -91,7 +107,18 @@ public class Robot extends TimedRobot {
 			robotInit();
     }
     //------------------------------------------ForkLift-------------------------------------
-    m_forkLiftDrive.set(-1.0*scaleJoystickInput(m_accesoryJoystick.getY()));
+    
+
+
+		double scaleJoystickInput = -1* scaleJoystickInput(m_accesoryJoystick.getY());
+    if((!isForkLimitLowerEnabled && !isForkLimitUpperEnabled) || // If no limit switches, just drive forklift
+      (isForkLimitUpperEnabled && scaleJoystickInput < 0 && !m_limitSwitchUp.get()) || // Or if upper limit and going up and not at upper limit
+      (isForkLimitLowerEnabled && scaleJoystickInput > 0 && !m_limitSwitchDown.get())) { // Or if lower limit and going down and not at lower limit
+		  m_forkLiftDrive.set(scaleJoystickInput);
+    } else {
+      m_forkLiftDrive.set(0);
+    }
+  
     //------------------------------------------RotateDrive----------------------------------
     if(m_driveJoystick.getRawButton(4)) {
       m_robotDrive.driveCartesian(0, 0, -kRotateDriveMagnitude, getGyroIfEnabled());
@@ -112,10 +139,10 @@ public class Robot extends TimedRobot {
       m_pincherDrive.set(0);
     }
     //-------------------------------------------LittleWheels----------------------------------
-    if(m_accesoryJoystick.getRawButton(1)) {
-      m_wheelGraber.set(kWheelGrabberDriveMagnitude);
-    } else if(m_accesoryJoystick.getRawButton(4)) {
-      m_wheelGraber.set(-kWheelGrabberDriveMagnitude);
+    if(m_accesoryJoystick.getRawButton(4)) {
+      m_wheelGraber.set(-kWheelGrabberDriveMagnitude*3);
+    } else if(m_accesoryJoystick.getRawButton(1)) {
+      m_wheelGraber.set(2*kWheelGrabberDriveMagnitude);
     } else {
       m_wheelGraber.set(0);
     }
@@ -123,7 +150,8 @@ public class Robot extends TimedRobot {
     /*
     m_armLiftDrive.set(scaleJoystickInput(m_accesoryJoystick.getZ()));
     */
-
+    
+    SmartDashboard.putBoolean("m_limitSwitchDown",m_limitSwitchDown.get());
   }
 
   private double getGyroIfEnabled() {
@@ -132,7 +160,6 @@ public class Robot extends TimedRobot {
     } else 
       return 0;
   }
-
   	/**
 	 * This method leverages a heuristic to "efficiently" add a dead zone and scale
 	 * the input to a quadratic curve
@@ -155,7 +182,8 @@ public class Robot extends TimedRobot {
 			adjustedInput = -adjustedInput;
 		}
 
-		return adjustedInput;
+    return adjustedInput;
+    
 	}
 
 }
